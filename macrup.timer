@@ -1,0 +1,10 @@
+[Unit]
+Description=Run macrup every 12 hours
+
+
+[Timer]
+OnCalendar=12hr
+Persistent=true     
+ 
+[Install]
+WantedBy=timers.target

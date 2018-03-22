@@ -1,0 +1,8 @@
+[Unit]
+Description=Run macrup backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/systemd-email address %i
+User=nobody
+Group=systemd-journal
