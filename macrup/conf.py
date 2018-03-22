@@ -5,6 +5,8 @@ import os
 import os.path
 from collections import namedtuple
 from .error import NoConfigError
+from datetime import datetime
+from pathlib import PosixPath
 
 # These can be overridden in the config file.
 # They are just here some sensible defaults
@@ -99,12 +101,64 @@ def loadConfig(path = None):
 path = os.path.expanduser('~') + '/.macrup.yaml'
 
 
-config = loadConfig(path)
+config_path = os.path.expanduser('~') + '/.macrup.yaml'
+config = loadConfig(config_path)
 
-class BackupLog(yaml.YAMLObject):
-	yaml_tag = '!Backups'
-	def __init__(self, backups = {}):
-		# self.backups = backups
-		self.backups = {k:datetime.strptime(v, config.timestamp) for k, v in backups.items()}
+class YAMLTime(yaml.YAMLObject):
+	yaml_tag = '!timestamp'
+	ts_format = '%y:%m:%d:%H:%M:%S'
+
+	def __init__(self, timestamp):
+		self._timestamp = timestamp
+
 	def __repr__(self):
-		return '%s(%s)'%(self.__class__.__name__, ', '.join(['%s=%s'%(k, v) for k, v in self.backups.items()]))
+		return self._timestamp.strftime(YAMLTime.ts_format)
+
+	@classmethod
+	def to_yaml(cls, dumper, data):
+		return dumper.represent_scalar('!timestamp', data._timestamp.strftime(YAMLTime.ts_format))
+
+	@classmethod
+	def from_yaml(cls, loader, node):
+		ts = loader.construct_scalar(node)
+		return cls(datetime.strptime(ts, YAMLTime.ts_format))
+
+class YAMLPath(yaml.YAMLObject):
+	yaml_tag = '!path'
+
+	def __init__(self, path):
+		self.path = path
+
+	def __repr__(self):
+		return self.path.as_posix()
+
+	@classmethod
+	def to_yaml(cls, dumper, data):
+		return dumper.represent_scalar('!path', data.path.as_posix())
+
+	@classmethod
+	def from_yaml(cls, loader, node):
+		path = loader.construct_scalar(node)
+		return cls(PosixPath(path))
+
+class DirBackup(yaml.YAMLObject):
+	yaml_tag = '!backup'
+	def __init__(self, **kwargs):
+		self.path = kwargs.get('path')
+		self.last_synced = kwargs.get('last_synced')
+		self.bucket = kwargs.get('bucket')
+
+	def __repr__(self):
+		return '%s(path=%s, last_synced=%s, bucket=%s'%(self.__class__.__name__,
+							self.path, self.last_synced, self.bucket)
+
+	@classmethod
+	def to_yaml(cls, dumper, data):
+		return dumper.represent_mapping('!backup', dict(path = data.path, 
+										last_synced = data.last_synced,
+										bucket = data.bucket))
+
+	@classmethod
+	def from_yaml(cls, loader, node):
+		dir = loader.construct_mapping(node)
+		return cls(**dir)
