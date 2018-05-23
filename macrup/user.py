@@ -1,17 +1,18 @@
-from .conf import config
-from .log import Log
-from .error import NoConfigError, InvalidConfigError, UnknownError
-from .rclone import RClone
-from yaml.scanner import ScannerError
-from pathlib import PosixPath
-from hashlib import blake2b
 import getpass
+from hashlib import blake2b
+from pathlib import PosixPath
+
+from yaml.scanner import ScannerError
+
+from .conf import config
+from .error import InvalidConfigError, NoConfigError, UnknownError
+from .log import Log
+from .rclone import RClone
 
 _log = Log('user')
 
-class Backup:
-	def __init__(self, dry_run = False):
-		try:
+class User:
+	def __init__(self, watched = [], exclude = [], prefix = None, notify = None, dryrun = False):
 			self._dry_run = dry_run
 			self._home = PosixPath.home()
 			self._user = user = getpass.getuser()
@@ -19,6 +20,20 @@ class Backup:
 			self._exclude = config.exclude if config.exclude else []
 			self._prefix = config.prefix if config.prefix else blake2b(user.encode('utf-8')).hexdigest()[:10]
 			self._notify = config.pushbullet if config.notify else None
+
+
+
+
+
+
+
+
+
+
+
+class Backup:
+	def __init__(self, dry_run = False):
+		try:
 			self.setRemote(config.remote)
 		except FileNotFoundError as fnf:
 			raise NoConfigError from fnfe
@@ -48,7 +63,7 @@ class Backup:
 		return self._rclone._push(path, bucket, excludes = self._exclude)
 
 	def _restore(self, path, bucket = None):
-		bucket = self._bucket_for(path) if bucket is None else bucke m,k8i8iiiiiiiiiiiiiiiut
+		bucket = self._bucket_for(path) if bucket is None else bucket
 		return self._rclone._pull(path, bucket, excludes = self._exclude)
 
 	def _add_watch(self, path):

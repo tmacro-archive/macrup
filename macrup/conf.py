@@ -1,12 +1,14 @@
-import yaml
-import sys
 import logging
 import os
 import os.path
+import sys
 from collections import namedtuple
-from .error import NoConfigError
 from datetime import datetime
 from pathlib import PosixPath
+
+import yaml
+
+from .error import NoConfigError
 
 # These can be overridden in the config file.
 # They are just here some sensible defaults
@@ -25,7 +27,7 @@ BUILT_IN_DEFAULTS = {
 				'whitelist': [],
 				'blacklist': []
 				},
-			'_dump': True	# If True and the loaded config is empty
+			'_dump': False	# If True and the loaded config is empty
 }							# 	Write out BUILT_IN_DEFAULTS and APP_DEFAULTS to the config after merging
 							# Keys prefaced with a '_' will not be written
 
@@ -40,10 +42,42 @@ APP_DEFAULTS = {
 	'notify': False,
 	'pushbullet': None,
 	'frequency': '1d',
-	'timestamp': '%y:%m:%d:%H:%M:%S'
+	'timestamp': '%y:%m:%d:%H:%M:%S',
+	'state_path': '~/.macrup.state'
 }
 
 BUILT_IN_DEFAULTS.update(APP_DEFAULTS)
+
+class YAMLTime:
+	yaml_tag = '!timestamp'
+	ts_format = '%y.%m.%d.%H:%M:%S'
+
+	@staticmethod
+	def to_yaml(dumper, data):
+		return dumper.represent_scalar(YAMLTime.yaml_tag, data.strftime(YAMLTime.ts_format))
+
+	@staticmethod
+	def from_yaml(loader, node):
+		ts = loader.construct_scalar(node)
+		return datetime.strptime(ts, YAMLTime.ts_format)
+
+yaml.add_representer(datetime, YAMLTime.to_yaml)
+yaml.add_constructor(YAMLTime.yaml_tag, YAMLTime.from_yaml)
+
+class YAMLPath:
+	yaml_tag = '!path'
+
+	@staticmethod
+	def to_yaml(dumper, data):
+		return dumper.represent_scalar(YAMLPath.yaml_tag, data.as_posix())
+
+	@staticmethod
+	def from_yaml(loader, node):
+		path = loader.construct_scalar(node)
+		return PosixPath(path)
+
+yaml.add_representer(PosixPath, YAMLPath.to_yaml)
+yaml.add_constructor(YAMLPath.yaml_tag, YAMLPath.from_yaml)
 
 def parseLogLevel(text, default = 30):
 	text = text.lower()
@@ -98,48 +132,12 @@ def loadConfig(path = None):
 	config['logging']['loglvl'] = parseLogLevel(config['logging']['loglvl']) # Parse the loglvl
 	return createNamespace(config) # Return the config for good measure
 
-path = os.path.expanduser('~') + '/.macrup.yaml'
+# path = os.path.expanduser('~') + '/.macrup.yaml'
 
 
 config_path = os.path.expanduser('~') + '/.macrup.yaml'
+# config_path = '.macrup.yaml'
 config = loadConfig(config_path)
-
-class YAMLTime(yaml.YAMLObject):
-	yaml_tag = '!timestamp'
-	ts_format = '%y:%m:%d:%H:%M:%S'
-
-	def __init__(self, timestamp):
-		self._timestamp = timestamp
-
-	def __repr__(self):
-		return self._timestamp.strftime(YAMLTime.ts_format)
-
-	@classmethod
-	def to_yaml(cls, dumper, data):
-		return dumper.represent_scalar('!timestamp', data._timestamp.strftime(YAMLTime.ts_format))
-
-	@classmethod
-	def from_yaml(cls, loader, node):
-		ts = loader.construct_scalar(node)
-		return cls(datetime.strptime(ts, YAMLTime.ts_format))
-
-class YAMLPath(yaml.YAMLObject):
-	yaml_tag = '!path'
-
-	def __init__(self, path):
-		self.path = path
-
-	def __repr__(self):
-		return self.path.as_posix()
-
-	@classmethod
-	def to_yaml(cls, dumper, data):
-		return dumper.represent_scalar('!path', data.path.as_posix())
-
-	@classmethod
-	def from_yaml(cls, loader, node):
-		path = loader.construct_scalar(node)
-		return cls(PosixPath(path))
 
 class DirBackup(yaml.YAMLObject):
 	yaml_tag = '!backup'
@@ -149,7 +147,7 @@ class DirBackup(yaml.YAMLObject):
 		self.bucket = kwargs.get('bucket')
 
 	def __repr__(self):
-		return '%s(path=%s, last_synced=%s, bucket=%s'%(self.__class__.__name__,
+		return '%s(path=%s, last_synced=%s, bucket=%s)'%(self.__class__.__name__,
 							self.path, self.last_synced, self.bucket)
 
 	@classmethod

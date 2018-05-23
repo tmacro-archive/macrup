@@ -1,8 +1,13 @@
 import click
-from .user import Backup
-from .notify import push
+# from .user import Backup
+from .backup import Backup
+import macrup.notify as notify
 import yaml
 import urllib.request
+from .log import Log
+from .conf import config
+from .util import RequiredIf
+_log = Log('cli')
 
 def checkConnection():
 	try:
@@ -19,21 +24,10 @@ def checkConnection():
 @click.option('--notify', '-n', is_flag = True)
 @click.option('--dry-run', is_flag = True)
 @click.pass_context
-def macrup(ctx, remote, watched, exclude, prefix, notify, dry_run):
-	ctx.obj = Backup(dry_run = dry_run)
-	print(remote, watched, exclude, prefix, notify)
-	if remote:
-		ctx.obj.setRemote(remote)
-	if watched:
-		for w in watched:
-			ctx.obj.addWatched(w)
-	if exclude:
-		for e in exclude:
-			ctx.obj._exclude.append(e)
-	if prefix:
-		ctx.obj._prefix = prefix
-	if notify:
-		ctx.obj._notify = notify
+@Backup
+def macrup(ctx):
+	# _log.debug(list(ctx.obj.watched))
+	pass
 
 @macrup.command()
 @click.pass_context
@@ -44,41 +38,61 @@ def backup(ctx):
 		exit(0)
 	if not ctx.obj.watched:
 		click.echo('No watched directories')
+	if not list(ctx.obj.outdated):
+		click.echo('Up to date!')
+		return 0
 	failed = []
-	for dir in ctx.obj.watched:
-		if not ctx.obj._backup(dir):
-			failed.append(dir)
+	for directory in ctx.obj.outdated:
+		if not directory.push():
+			failed.append(directory)
+	ctx.obj.save()
 	if failed:
 		click.echo("Some directories failed to sync!")
-		click.echo('\n'.join([d.as_posix() for d in failed]))
 		if ctx.obj.notify:
-			if ctx.obj.pushbullet is None:
+			if config.pushbullet is None:
 				click.echo('You must supply a Pushbullet API key to enable push notifications!')
 				exit(1)
-			push(ctx.obj.pushbullet, 'note', title = 'Macrup', body = 'Failed Sync\n' + '\n'.join([d.as_posix() for d in failed]))
+			print(config.pushbullet)
+			notify.push(config.pushbullet, 'note', title = 'Macrup', body = 'Failed Sync\n' + '\n'.join([d.name for d in failed]))
 	else:
 		if ctx.obj.notify:
-			if ctx.obj.pushbullet is None:
+			if config.pushbullet is None:
 				click.echo('You must supply a Pushbullet API key to enable push notifications!')
 				exit(1)
-			push(ctx.obj.pushbullet, 'note', title = 'Macrup', body = 'Successful Sync')
+			notify.push(config.pushbullet, 'note', title = 'Macrup', body = 'Successful Sync')
+			
 
 
 @macrup.command()
-@click.pass_context
-# @click.argument('bucket')
-# @click.argument('dest')
-def restore(ctx):
+@click.pass_obj
+@click.option('--bucket', '-b', help = 'bucket to pull from', required = False)
+@click.option('--dest', '-d', cls = RequiredIf, help = 'destination directory', required_if = 'bucket')
+def restore(backup, bucket, dest):
 	'''Restore a bucket to a directory'''
 	if not checkConnection():
 		click.echo('No internet connection detected, can not restore.')
 		exit(0)
-	if not ctx.obj.watched:
+	# if bucket and not dest:
+	# 	raise click.BadArgumentUsage('You must provide a destination if a bucket is specified!')
+	if not backup.watched:
 		click.echo('No watched directories')
 	failed = []
-	for dir in ctx.obj.watched:
-		if not ctx.obj._restore(dir):
-			failed.append(dir)
+	for directory in backup.watched:
+		if not directory.pull():
+			failed.append(directory)
+	if failed:
+		click.echo("Some directories failed to sync!")
+		if backup.notify:
+			if config.pushbullet is None:
+				click.echo('You must supply a Pushbullet API key to enable push notifications!')
+				exit(1)
+			notify.push(config.pushbullet, 'note', title = 'Macrup', body = 'Failed Sync\n' + '\n'.join([d.name for d in failed]))
+	else:
+		if backup.notify:
+			if config.pushbullet is None:
+				click.echo('You must supply a Pushbullet API key to enable push notifications!')
+				exit(1)
+			notify.push(config.pushbullet, 'note', title = 'Macrup', body = 'Successful Sync')
 
 @macrup.command()
 def delete():
@@ -100,4 +114,4 @@ def forget():
 def ls(ctx):
 	'''List watched directories and last sync time'''
 	for dir in ctx.obj.watched:
-		click.echo(dir)
+		click.echo('%s\t%s'%(dir.synced, dir.name))

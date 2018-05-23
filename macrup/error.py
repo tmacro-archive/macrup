@@ -8,7 +8,7 @@ class UnknownError(MacrupError):
     pass
 
 class ConfigError(MacrupError):
-    '''Error regarding script configuration'''
+    '''Error regarding configuration'''
     pass
 
 class InvalidConfigError(ConfigError):
@@ -17,4 +17,10 @@ class InvalidConfigError(ConfigError):
 
 class NoConfigError(ConfigError):
     '''Error locating a users config'''
+    pass
+
+class ConfigImportError(ConfigError):
+    '''Error locating a child config file'''
+    pass
+class RequiredArguementError(MacrupError):
     pass

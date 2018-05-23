@@ -1,9 +1,10 @@
-from .conf import config
-import subprocess
-from threading import Thread, Event
 import shlex
-from .log import Log
+import subprocess
 import urllib.request
+from threading import Event, Thread
+
+from .conf import config
+from .log import Log
 
 _log = Log('rclone.process')
 
@@ -27,8 +28,9 @@ class RClone:
 		return proc.wait()
 
 	def _sync(self, src, dest, excludes = [], verbose = True):
+		flags = '-v --fast-list --checksum --auto-confirm'
 		dry_run = '--dry-run' if self._dry_run else ''
-		cmd = '/usr/bin/rclone %s %s sync %s %s'%(dry_run, self._build_excludes(*excludes), src, dest)
+		cmd = '/usr/bin/rclone %s %s %s sync %s %s'%(flags, dry_run, self._build_excludes(*excludes), src, dest)
 
 		def _on_exit(rc):
 			if rc == 0:
